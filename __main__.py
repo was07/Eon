@@ -28,8 +28,7 @@ OBJECTS: list["Object"] = []
 
 
 class Object:
-    def __init__(self, sim: "Simulation", name: str, x, y, mass: int, radious: int, color: tuple, y_vel=0, sun=False) -> None:
-        self.sim = sim
+    def __init__(self, name: str, x, y, mass: int, radious: int, color: tuple, y_vel=0, sun=False) -> None:
         self.name = name
         self.x = x
         self.y = y
