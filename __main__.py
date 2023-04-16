@@ -5,6 +5,7 @@ WIDTH, HEIGHT = 1200, 700
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("The Solar System")
 CX, CY = WIDTH/2, HEIGHT/2
 
 CAMX, CAMY = 0, 0  # m
@@ -16,7 +17,7 @@ TIMESTEP = 2600*12  # 1 day
 
 ORBIT_TRAIL_LENGTH = 1000  # positions of last X frames are stored and shown as trail
 
-class Reasources:
+class Resources:
     font = pygame.font.SysFont('Consolas', 12)
     space_image = pygame.transform.scale(
         pygame.image.load("space.jpg").convert(),
@@ -27,7 +28,8 @@ OBJECTS: list["Object"] = []
 
 
 class Object:
-    def __init__(self, name: str, x, y, mass: int, radious: int, color: tuple, y_vel=0, sun=False) -> None:
+    def __init__(self, sim: "Simulation", name: str, x, y, mass: int, radious: int, color: tuple, y_vel=0, sun=False) -> None:
+        self.sim = sim
         self.name = name
         self.x = x
         self.y = y
@@ -43,6 +45,9 @@ class Object:
 
         self._last_zoom = ZOOM  # used for effeciency purposes
         OBJECTS.append(self)
+
+        self.info_distance_to_sun = 0
+        self.show_info = False
     
     def get_pos(self):
         return CX + self.x * ZOOM, CY + self.y * ZOOM
@@ -50,6 +55,7 @@ class Object:
     def draw(self):
         x = CX + self.x * ZOOM
         y = CY + self.y * ZOOM
+        r = self.radious * ZOOM
 
         if len(self.orbit) > 1:
             # scaled_points = []
@@ -62,12 +68,25 @@ class Object:
         
             # pygame.draw.lines(screen, self.color, False, scaled_points)
         
-        pygame.draw.circle(screen, self.color, (x, y), max(self.radious * ZOOM, 1))
+        pygame.draw.circle(screen, self.color, (x, y), max(r, 1))
 
-        text = Reasources.font.render(self.name, True, (255, 255, 255))
-        rect = text.get_rect()
-        rect.center = (x, y + (self.radious * ZOOM) + 20)
-        screen.blit(text, rect)
+        if not ZOOM < 1e-11 or self.sun:
+            text = Resources.font.render(self.name, True, (255, 255, 255))
+            rect = text.get_rect()
+            rect.center = (x, y + r + 15)
+            screen.blit(text, rect)
+
+        if self.show_info:
+            # if not self.sun:
+                # text = Resources.font.render(str(format(int(self.distance_to_sun/1e3), ','))+"km", True, (200,200,200))
+                # rect = text.get_rect()
+                # rect.center = (x, y + r + 30)
+                # screen.blit(text, (10, 10))
+            
+            pygame.draw.line(screen, (200,200,200), (x + r + 15, y), (x + r + 20, y))
+            pygame.draw.line(screen, (200,200,200), (x - r - 15, y), (x - r - 20, y))
+
+            self.show_info = False
 
         return x, y
     
@@ -77,8 +96,8 @@ class Object:
         distance_y = other_y - self.y
         distance = math.sqrt(distance_x ** 2 + distance_y ** 2)
 
-        # if other.sun:
-            # self.distance_to_sun = distance
+        if other.sun:
+            self.info_distance_to_sun = distance
 
         force = (G * self.mass * other.mass) / distance**2
         theta = math.atan2(distance_y, distance_x)
@@ -119,16 +138,19 @@ def track(obj: Object):
 class Simulation:
     def __init__(self):
         """Units: Meter, Second, KG"""
-        Object("Sun", 0, 0, 1.989e30, 696340e3, (253, 184, 19))
-    
+        self.panel = Panel(self)
+        Object("Sun", 0, 0, 1.989e30, 696340e3, (253, 184, 19), sun=True)
+        
         Object("Mercury", 57.9e9, 0, 3.285e23, 2439e3, (179, 104, 18), -47.4e3)
-        Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), 35.02e3)
+        Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), -35.02e3)
         Object("Earth", 149.9e9, 0, 5.972e24, 6378e3, (79, 146, 255), -29.8e3)
         Object("Mars", -228e9, 0, 0.642e24, 6792e3/2, (237, 77, 14), 24.1e3)
         Object("Jupiter", 778.5e9, 0, 1898e24, 142984e3/2, (216, 202, 157), -13.1e3)
         Object("Saturn", -1432e9, 0 ,568e24, 120536e3/2, (206,206,206), 9.7e3)
-        Object("Uranus", 2867e9, 0, 86.8e24, 51118e3/2, (209,231,231), -6.8e3)
-        Object("Neptune", -4515e9, 0, 102e14, 49528e3/2, (91,93,223), 5.4e3)
+        Object("Uranus", -2867e9, 0, 86.8e24, 51118e3/2, (209,231,231), -6.8e3)
+        Object("Neptune", 4515e9, 0, 102e14, 49528e3/2, (91,93,223), -5.4e3)
+
+        self.focus = ""
     
     def _zoom(self, zn: 1 | -1):
         global ZOOM
@@ -142,11 +164,10 @@ class Simulation:
 
         while running:
             for eve in pygame.event.get():
-                if eve.type == pygame.QUIT:
-                    running = False
+                if eve.type == pygame.QUIT: running = False
             
             setup_perspective()
-
+            mx, my = pygame.mouse.get_pos()  # used later in method
             keys = pygame.key.get_pressed()
             if keys[pygame.K_EQUALS]:
                 self._zoom(+1)
@@ -160,26 +181,77 @@ class Simulation:
                 CAMY -= 10 / ZOOM  # meters in 10px
             elif keys[pygame.K_UP]:
                 CAMY += 10 / ZOOM
+            if keys[pygame.K_ESCAPE]:
+                self.focus = ""
+            setup_perspective()
             
-            rect = Reasources.space_image.get_rect()
+            rect = Resources.space_image.get_rect()
             rect.center = WIDTH/2, HEIGHT/2
             # screen.fill((0, 0, 0))
-            screen.blit(Reasources.space_image, rect)
+            screen.blit(Resources.space_image, rect)
 
+            dists = {}
             for obj in OBJECTS:
                 obj.update_position()
-                # if obj.name == "Saturn":
-                #     track(obj)
-                #     setup_perspective()
+                if obj.name == self.focus:
+                    track(obj)
+                    setup_perspective()
+                    self.panel.draw(focus_obj=obj)
+                else:
+                    self.panel.draw()
                 ox, oy = obj.draw()
-
+                dist = math.sqrt((mx-ox)**2 + (my-oy)**2)
+                dists[dist] = obj
+            
+            # show info for the closest obj
+            min_dist = min(list(dists))
+            if min_dist < 150:
+                dists[min_dist].show_info = True
+                if keys[pygame.K_RETURN]:
+                    self.focus = dists[min_dist].name
+            
+            # show fps
             fps = str(int(clock.get_fps()))
-            text = Reasources.font.render("FPS: " + fps, True, (255, 255, 255))
-            screen.blit(text, (10, 10))
+            text = Resources.font.render("FPS: " + fps, True, (255, 255, 255))
+            rect = text.get_rect()
+            rect.topright = (WIDTH - 10, 10)
+            screen.blit(text, rect)
 
             pygame.display.flip()
             clock.tick(60)
 
         pygame.quit()
 
-Simulation().run()
+
+class Panel:
+    """Handles all text and stuff (other than the simulation) on the screen"""
+    def __init__(self, sim) -> None:
+        self.sim = sim
+    
+    def draw(self, focus_obj: Object = None):
+        topleft_texts = []
+        if focus_obj:
+            topleft_texts.append(focus_obj.name)
+            if not focus_obj.sun:
+                topleft_texts.append(str(format(int(focus_obj.info_distance_to_sun/1e3), ','))+"km")
+            vel = math.sqrt(focus_obj.x_vel ** 2 + focus_obj.y_vel ** 2)
+            topleft_texts.append(str(format(round(abs(vel/1e3), 3), ','))+"km/s")
+        else:
+            ...
+        
+        # topleft
+        y = 0
+        for _text in topleft_texts:
+            y += 20
+            text = Resources.font.render(_text, False, (255,255,255))
+            screen.blit(text, (20, y))
+        
+        # bottomleft
+        text = Resources.font.render("Zoom: " + str(ZOOM), False, (225,225,225))
+        rect = text.get_rect()
+        rect.bottomleft = (20, HEIGHT - 20)
+        screen.blit(text, rect)
+
+
+if __name__ == "__main__":
+    Simulation().run()
