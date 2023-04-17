@@ -13,7 +13,7 @@ CAMX, CAMY = 0, 0  # m
 ZOOM = 8e-10  # pixels for 1 m
 
 G = 6.67428e-11
-TIMESTEP = 2600*12  # 1 day
+TIMESTEP = 2600*12  # 12 hours
 
 ORBIT_TRAIL_LENGTH = 1000  # positions of last X frames are stored and shown as trail
 
@@ -69,7 +69,7 @@ class Object:
         
         pygame.draw.circle(screen, self.color, (x, y), max(r, 1))
 
-        if not ZOOM < 1e-11 or self.sun:
+        if not ZOOM < 1e-11 or self.radious >= 696340e3:
             text = Resources.font.render(self.name, True, (255, 255, 255))
             rect = text.get_rect()
             rect.center = (x, y + r + 15)
@@ -145,7 +145,7 @@ class Simulation:
         Object("Earth", 149.9e9, 0, 5.972e24, 6378e3, (79, 146, 255), -29.8e3)
         Object("Mars", -228e9, 0, 0.642e24, 6792e3/2, (237, 77, 14), 24.1e3)
         Object("Jupiter", 778.5e9, 0, 1898e24, 142984e3/2, (216, 202, 157), -13.1e3)
-        Object("Saturn", -1432e9, 0 ,568e24, 120536e3/2, (206,206,206), 9.7e3)
+        Object("Saturn", -1432e9, 0 , 568e24, 120536e3/2, (206,206,206), 9.7e3)
         Object("Uranus", -2867e9, 0, 86.8e24, 51118e3/2, (209,231,231), -6.8e3)
         Object("Neptune", 4515e9, 0, 102e14, 49528e3/2, (91,93,223), -5.4e3)
 
@@ -153,7 +153,7 @@ class Simulation:
     
     def _zoom(self, zn: 1 | -1):
         global ZOOM
-        if 8e-6 > (ZOOM + (ZOOM / 10) * zn) > 1e-12:  # close limit / far limit
+        if 8e-6 > (ZOOM + (ZOOM / 10) * zn) > 1e-13:  # close limit / far limit
             ZOOM += (ZOOM / 10) * zn
         
     def run(self):
