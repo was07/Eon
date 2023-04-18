@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 
 WIDTH, HEIGHT = 1200, 700
 
@@ -10,12 +11,15 @@ CX, CY = WIDTH/2, HEIGHT/2
 
 CAMX, CAMY = 0, 0  # m
 
-ZOOM = 8e-10  # pixels for 1 m
-
 G = 6.67428e-11
-TIMESTEP = 2600*12  # 12 hours
+AU = 149.9e9
+SOLAR_MASS = 1.989e30
+EARTH_MASS = 5.972e24
 
-ORBIT_TRAIL_LENGTH = 1000  # positions of last X frames are stored and shown as trail
+ZOOM = 8e-10  # pixels for 1 m
+TIMESTEP = 2600*24  # 12 hours
+
+ORBIT_TRAIL_LENGTH = 600  # positions of last X frames are stored and shown as trail
 
 class Resources:
     font = pygame.font.SysFont('Consolas', 12)
@@ -28,7 +32,7 @@ OBJECTS: list["Object"] = []
 
 
 class Object:
-    def __init__(self, name: str, x, y, mass: int, radious: int, color: tuple, y_vel=0, sun=False) -> None:
+    def __init__(self, name: str, x, y, mass: int, radious: int, color: tuple, y_vel=0, sun=False, significant=True) -> None:
         self.name = name
         self.x = x
         self.y = y
@@ -42,6 +46,7 @@ class Object:
         self.y_vel = y_vel
         self.orbit = []
 
+        self.significant = significant
         self._last_zoom = ZOOM  # used for effeciency purposes
         OBJECTS.append(self)
 
@@ -54,22 +59,24 @@ class Object:
     def draw(self):
         x = CX + self.x * ZOOM
         y = CY + self.y * ZOOM
+        if ZOOM < 1e-11 and not self.significant: return x, y
         r = self.radious * ZOOM
 
-        if len(self.orbit) > 1:
-            # scaled_points = []
-            trail_length = min(ORBIT_TRAIL_LENGTH, len(self.orbit) - 1)
-            lx, ly = self.orbit[0]
-            for i, (ox, oy) in enumerate(self.orbit[1:]):
-                # scaled_points.append((CX + ox * ZOOM, CY + oy * ZOOM))
-                pygame.draw.line(screen, [n * i / trail_length for n in self.color], (CX+lx*ZOOM, CY+ly*ZOOM), (CX+ox*ZOOM, CY+oy*ZOOM))
-                lx, ly = ox, oy
+        if self.significant:
+            if len(self.orbit) > 1:
+                # scaled_points = []
+                trail_length = min(ORBIT_TRAIL_LENGTH, len(self.orbit) - 1)
+                lx, ly = self.orbit[0]
+                for i, (ox, oy) in enumerate(self.orbit[1:]):
+                    # scaled_points.append((CX + ox * ZOOM, CY + oy * ZOOM))
+                    pygame.draw.line(screen, [n * i / trail_length for n in self.color], (CX+lx*ZOOM, CY+ly*ZOOM), (CX+ox*ZOOM, CY+oy*ZOOM))
+                    lx, ly = ox, oy
         
             # pygame.draw.lines(screen, self.color, False, scaled_points)
         
         pygame.draw.circle(screen, self.color, (x, y), max(r, 1))
 
-        if not ZOOM < 1e-11 or self.radious >= 696340e3:
+        if (self.significant or ZOOM > 9e-10 or self.show_info) and (not ZOOM < 1e-11 or self.radious >= 696340e3):
             text = Resources.font.render(self.name, True, (255, 255, 255))
             rect = text.get_rect()
             rect.center = (x, y + r + 15)
@@ -82,8 +89,11 @@ class Object:
                 # rect.center = (x, y + r + 30)
                 # screen.blit(text, (10, 10))
             
-            pygame.draw.line(screen, (200,200,200), (x + r + 15, y), (x + r + 20, y))
-            pygame.draw.line(screen, (200,200,200), (x - r - 15, y), (x - r - 20, y))
+            if r > 1:
+                pygame.draw.line(screen, (200,200,200), (x + r + 15, y), (x + r + 20, y))
+                pygame.draw.line(screen, (200,200,200), (x - r - 15, y), (x - r - 20, y))
+            else:
+                pygame.draw.circle(screen, (200, 200, 200), (x, y), r + 8, 1)
 
             self.show_info = False
 
@@ -117,7 +127,8 @@ class Object:
 
         self.x += self.x_vel * TIMESTEP
         self.y += self.y_vel * TIMESTEP
-        self.orbit.append((self.x, self.y))
+        if self.significant:
+            self.orbit.append((self.x, self.y))
         
         if len(self.orbit) > ORBIT_TRAIL_LENGTH:
             self.orbit = self.orbit[-ORBIT_TRAIL_LENGTH:]
@@ -138,17 +149,25 @@ class Simulation:
     def __init__(self):
         """Units: Meter, Second, KG"""
         self.panel = Panel(self)
-        Object("Sun", 0, 0, 1.989e30, 696340e3, (253, 184, 19), sun=True)
+        Object("Sun", 0, 0, SOLAR_MASS, 696340e3, (253, 184, 19), sun=True)
         
         Object("Mercury", 57.9e9, 0, 3.285e23, 2439e3, (179, 104, 18), -47.4e3)
         Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), -35.02e3)
-        Object("Earth", 149.9e9, 0, 5.972e24, 6378e3, (79, 146, 255), -29.8e3)
+        Object("Earth", AU, 0, EARTH_MASS, 6378e3, (79, 146, 255), -29.8e3)
         Object("Mars", -228e9, 0, 0.642e24, 6792e3/2, (237, 77, 14), 24.1e3)
         Object("Jupiter", 778.5e9, 0, 1898e24, 142984e3/2, (216, 202, 157), -13.1e3)
         Object("Saturn", -1432e9, 0 , 568e24, 120536e3/2, (206,206,206), 9.7e3)
         Object("Uranus", -2867e9, 0, 86.8e24, 51118e3/2, (209,231,231), -6.8e3)
         Object("Neptune", 4515e9, 0, 102e14, 49528e3/2, (91,93,223), -5.4e3)
 
+        # for i in range(100):
+        #     x = random.choice((-1, 1))
+        #     orbit_r = random.randint(1.9*AU, 3.8*AU)
+        #     Object(f"T-{i}", x * orbit_r, 0, 2,
+        #             random.randint(1e3, 10e3), (100,100,100), -1 * x * math.sqrt(G * SOLAR_MASS / orbit_r),
+        #             significant=False)
+        #     print(x * math.sqrt(G * SOLAR_MASS * orbit_r))
+        
         self.focus = ""
     
     def _zoom(self, zn: 1 | -1):
@@ -174,15 +193,16 @@ class Simulation:
                 self._zoom(-1)
             if keys[pygame.K_RIGHT]:
                 CAMX -= 10 / ZOOM  # meters in 10px
+                self.focus = ""
             elif keys[pygame.K_LEFT]:
                 CAMX += 10 / ZOOM
+                self.focus = ""
             if keys[pygame.K_DOWN]:
                 CAMY -= 10 / ZOOM  # meters in 10px
+                self.focus = ""
             elif keys[pygame.K_UP]:
                 CAMY += 10 / ZOOM
-            if keys[pygame.K_ESCAPE]:
                 self.focus = ""
-            setup_perspective()
             
             rect = Resources.space_image.get_rect()
             rect.center = WIDTH/2, HEIGHT/2
@@ -204,7 +224,7 @@ class Simulation:
             
             # show info for the closest obj
             min_dist = min(list(dists))
-            if min_dist < 150:
+            if min_dist < 80:
                 dists[min_dist].show_info = True
                 if keys[pygame.K_RETURN]:
                     self.focus = dists[min_dist].name
