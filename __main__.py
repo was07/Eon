@@ -33,7 +33,7 @@ OBJECTS: list["Object"] = []
 
 class Object:
     def __init__(self, name: str, x, y, mass: int, radious: int, color: tuple,
-                 x_vel=0, y_vel=0, sun=False, significant=True, track_orbit=False) -> None:
+                 x_vel=0, y_vel=0, star=False, significant=True, track_orbit=False) -> None:
         self.name = name
         self.x = x
         self.y = y
@@ -41,7 +41,7 @@ class Object:
         self.radius = radious
         self.color = color
         
-        self.sun = sun
+        self.star = star
 
         self.x_vel = x_vel
         self.y_vel = y_vel
@@ -64,7 +64,7 @@ class Object:
         if ZOOM < 1e-11 and not self.significant: return x, y
         r = self.radius * ZOOM
 
-        if self.significant or True:
+        if self.track_orbit:
             if len(self.orbit) > 1:
                 # scaled_points = []
                 trail_length = min(ORBIT_TRAIL_LENGTH, len(self.orbit) - 1)
@@ -76,10 +76,11 @@ class Object:
         
             # pygame.draw.lines(screen, self.color, False, scaled_points)
         
-        if r > 1e-4:
+        if r > 1e-6:
             pygame.draw.circle(screen, self.color, (x, y), max(r, 1))
 
-        if (self.significant or ZOOM > 9e-10 or self.show_info) and (not ZOOM < 1e-11 or self.radius >= 696340e3):
+        if (self.significant or ZOOM > 9e-10 or self.show_info) and (not ZOOM < 1e-11 or self.radius >= 696340e3) \
+            and (0 < x < WIDTH and 0 < y < HEIGHT):
             text = Resources.font.render(self.name, True, (255, 255, 255))
             rect = text.get_rect()
             rect.center = (x, y + r + 15)
@@ -101,14 +102,30 @@ class Object:
             self.show_info = False
 
         return x, y
+    
+    def kill(self):
+        if self in OBJECTS: OBJECTS.remove(self)
        
     def attraction(self, other: "Object"):  # physics and math
         other_x, other_y = other.x, other.y
         distance_x = other_x - self.x
         distance_y = other_y - self.y
         distance = math.sqrt(distance_x ** 2 + distance_y ** 2)
-        
-        if other.sun:
+
+        if distance <= (self.radius + other.radius) and self.mass > other.mass:
+            print(self.name, "into", other.name)
+            # new = Object("New", (big.x+small.x)/2, (big.y+small.y)/2, big.mass+small.mass,
+            #              big.radius,
+            #              [(big.color[i]+small.color[i])/2 for i in range(3)],
+            #              big.x_vel, big.y_vel, big.star or small.star,
+            #              big.significant or small.significant, big.track_orbit or small.track_orbit
+            # )
+
+            self.mass += other.mass
+            # big.kill()
+            other.kill()
+
+        if other.star:
             self.info_distance_to_sun = distance
 
         force = (G * self.mass * other.mass) / distance**2
@@ -146,33 +163,52 @@ def track(obj: Object):
     global CAMX, CAMY
     CAMX, CAMY = -obj.x, -obj.y  # idk why negative but it works
 
+def cords(dist, angle, origin_x=0, origin_y=0):
+    # angle goes clockwise, starting from right (+x)
+    return origin_x + dist * math.cos(angle), origin_y + dist * math.sin(angle)
+
+def calc_xy_speed(angle, speed, clockwise=False):
+    angle += 90 if clockwise else -90
+    return speed * math.cos(angle), speed * math.sin(angle)
+
 
 class Simulation:
     def __init__(self):
         """Units: Meter, Second, KG"""
         self.panel = Panel(self)
-        Object("Sun", 0, 0, SOLAR_MASS, 696340e3, (253, 184, 19), sun=True)
-        
-        # Object("Mercury", 57.9e9, 0, 3.285e23, 2439e3, (179, 104, 18), y_vel=-47.4e3)
-        # Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), y_vel=-35.02e3)
-        # Object("Earth", AU, 0, EARTH_MASS, 6378e3, (79, 146, 255), y_vel=-29.8e3)
-        # Object("Mars", -228e9, 0, 0.642e24, 6792e3/2, (237, 77, 14), y_vel=24.1e3)
-        # Object("Jupiter", 778.5e9, 0, 1898e24, 142984e3/2, (216, 202, 157), y_vel=-13.1e3)
-        # Object("Saturn", -1432e9, 0 , 568e24, 120536e3/2, (206,206,206), y_vel=9.7e3)
-        # Object("Uranus", 0, -2867e9, 86.8e24, 51118e3/2, (209,231,231), x_vel=6.8e3)
-        # Object("Neptune", 0, 4515e9, 102e24, 49528e3/2, (91,93,223), x_vel=5.4e3)
+        sun = Object("Sun", 0, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=True)
+        # Object("Sun 2", 8*AU, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=True, y_vel=5e3)
+        # Object("Sun 3", 1*AU, 0, SOLAR_MASS, 696340e3, (253, 184, 19), sun=True)
 
-        # Object("Ceres", 414e9, 0, 9.3839e23, 939.4e3/2, (158,158,150), y_vel=-17.9e3, significant=False)
-        # Object("Pluto", -5900e9, 0, 1.303e22, 1188.3e3, (244,245,223), y_vel=4.743e3, significant=False)
-        # Object("Haumea", 43.116*AU, 0, 4.006e21, 780e3/2, (158,158,150), y_vel=-4.53e3, significant=False)
+        Object("Mercury", 57.9e9, 0, 3.285e23, 2439e3, (179, 104, 18), y_vel=-47.4e3)
+        Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), y_vel=-35.02e3)
+        Object("Earth", AU, 0, EARTH_MASS, 6378e3, (79, 146, 255), y_vel=-29.8e3)
+        Object("Mars", -228e9, 0, 0.642e24, 6792e3/2, (237, 77, 14), y_vel=24.1e3)
+        Object("Jupiter", 778.5e9, 0, 1898e24, 142984e3/2, (216, 202, 157), y_vel=-13.1e3)
+        Object("Saturn", -1432e9, 0 , 568e24, 120536e3/2, (206,206,206), y_vel=9.7e3)
+        Object("Uranus", 0, -2867e9, 86.8e24, 51118e3/2, (209,231,231), x_vel=6.8e3)
+        Object("Neptune", 0, 4515e9, 102e24, 49528e3/2, (91,93,223), x_vel=5.4e3)
 
-        # for i in range(100):
-        #     x = random.choice((-1, 1))
-        #     orbit_r = random.randint(1.9*AU, 3.8*AU)
-        #     Object(f"T-{i}", x * orbit_r, 0, 2,
-        #             random.randint(1e3, 10e3), (100,100,100), -1 * x * math.sqrt(G * SOLAR_MASS / orbit_r),
-        #             significant=False)
-        #     print(x * math.sqrt(G * SOLAR_MASS * orbit_r))
+        Object("Ceres", 414e9, 0, 9.3839e23, 939.4e3/2, (158,158,150), y_vel=-17.9e3, significant=False, track_orbit=True)
+        Object("Pluto", -5900e9, 0, 1.303e22, 1188.3e3, (244,245,223), y_vel=4.743e3, significant=False, track_orbit=True)
+        Object("Haumea", 43.116*AU, 0, 4.006e21, 780e3/2, (158,158,150), y_vel=-4.53e3, significant=False, track_orbit=True)
+
+        # for i in range(20):
+        #     dist = random.randint(1.9*AU, 3.8*AU)
+        #     angle = random.randint(1, 360)
+        #     speed = math.sqrt(G * SOLAR_MASS / dist)
+
+        #     x, y = cords(dist, angle)
+        #     vx, vy = calc_xy_speed(angle, speed)
+            
+        #     # signx = 1 if x > 0 else -1
+        #     # signy = 1 if y > 0 else -1
+
+        #     # print(x * ZOOM, y * ZOOM)
+        #     # print(speed, vx, vy)
+        #     Object(f"T{i}", x, y, 2.39e21,
+        #             random.randint(1e3, 10e3), (100,100,100), x_vel=vx, y_vel=vy,
+        #             significant=False, track_orbit=True)
         
         self.focus = ""
     
@@ -185,30 +221,34 @@ class Simulation:
         global ZOOM, CX, CY, CAMX, CAMY
         clock = pygame.time.Clock()
         running = True
+        pause = False
 
         while running:
             for eve in pygame.event.get():
                 if eve.type == pygame.QUIT: running = False
+                if eve.type == pygame.KEYDOWN and eve.key == pygame.K_SPACE:
+                    pause = not pause; print(pause)
             
             setup_perspective()
             mx, my = pygame.mouse.get_pos()  # used later in method
             keys = pygame.key.get_pressed()
-            if keys[pygame.K_EQUALS]:
+            if keys[pygame.K_z]:
                 self._zoom(+1)
-            elif keys[pygame.K_MINUS]:
+            elif keys[pygame.K_x]:
                 self._zoom(-1)
-            if keys[pygame.K_RIGHT]:
+            if keys[pygame.K_d]:
                 CAMX -= 10 / ZOOM  # meters in 10px
                 self.focus = ""
-            elif keys[pygame.K_LEFT]:
+            elif keys[pygame.K_a]:
                 CAMX += 10 / ZOOM
                 self.focus = ""
-            if keys[pygame.K_DOWN]:
+            if keys[pygame.K_s]:
                 CAMY -= 10 / ZOOM  # meters in 10px
                 self.focus = ""
-            elif keys[pygame.K_UP]:
+            elif keys[pygame.K_w]:
                 CAMY += 10 / ZOOM
                 self.focus = ""
+            
             setup_perspective()
             
             rect = Resources.space_image.get_rect()
@@ -219,7 +259,7 @@ class Simulation:
             focus_obj = None
             dists = {}
             for obj in OBJECTS:
-                obj.update_position()
+                if not pause: obj.update_position()
                 if obj.name == self.focus:
                     track(obj)
                     setup_perspective()
@@ -232,7 +272,7 @@ class Simulation:
             min_dist = min(list(dists))
             if min_dist < 80:
                 dists[min_dist].show_info = True
-                if keys[pygame.K_RETURN]:
+                if keys[pygame.K_TAB]:
                     self.focus = dists[min_dist].name
             
             self.panel.draw(focus_obj=focus_obj)
@@ -257,16 +297,25 @@ class Panel:
     def draw(self, focus_obj: Object = None):
         topleft_texts = []
         if focus_obj:
-            topleft_texts.append(focus_obj.name)
-            if not focus_obj.sun:
-                topleft_texts.append(str(format(int(focus_obj.info_distance_to_sun/1e3), ','))+"km")
+            if focus_obj.star:
+                topleft_texts.append("Active")
+            else:
+                # topleft_texts.append("Inactive")
+                topleft_texts.append("From Sun " +
+                                     str(format(int(focus_obj.info_distance_to_sun/1e3), ',')) +
+                                     "km | " + str(round(focus_obj.info_distance_to_sun/AU, 3)) + "AU")
             vel = math.sqrt(focus_obj.x_vel ** 2 + focus_obj.y_vel ** 2)
-            topleft_texts.append(str(format(round(abs(vel/1e3), 3), ','))+"km/s")
-        else:
-            ...
-        
+            topleft_texts.append("Speed    "+str(format(round(abs(vel/1e3), 3), ','))+"km/s")
+            topleft_texts.append("Mass     "+str(focus_obj.mass)+"kg")
+            topleft_texts.append("Diameter "+str(format(focus_obj.radius*2/1e3, ','))+"km")
+
+            screen.blit(Resources.font.render(focus_obj.name, False, focus_obj.color), (20, 20))
+            
+            text = Resources.font.render("Tracking: " + focus_obj.name, False, (225,225,225))
+            rect = text.get_rect(midbottom=(WIDTH/2, HEIGHT - 20))
+            screen.blit(text, rect)
         # topleft
-        y = 0
+        y = 40
         for _text in topleft_texts:
             y += 20
             text = Resources.font.render(_text, False, (255,255,255))
