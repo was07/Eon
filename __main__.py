@@ -128,7 +128,7 @@ class Object:
         if other.star:
             self.info_distance_to_sun = distance
 
-        force = (G * self.mass * other.mass) / distance**2
+        force = 0 if distance == 0 else(G * self.mass * other.mass) / distance**2
         theta = math.atan2(distance_y, distance_x)
         force_x = math.cos(theta) * force
         force_y = math.sin(theta) * force
@@ -177,8 +177,8 @@ class Simulation:
         """Units: Meter, Second, KG"""
         self.panel = Panel(self)
         sun = Object("Sun", 0, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=True)
-        # Object("Sun 2", 8*AU, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=True, y_vel=5e3)
-        # Object("Sun 3", 1*AU, 0, SOLAR_MASS, 696340e3, (253, 184, 19), sun=True)
+        Object("Sun 2", 8*AU, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=False, y_vel=5e3)
+        # Object("Sun 3", 1*AU, 0, SOLAR_MASS, 696340e3, (254, 185, 20), star=True)
 
         Object("Mercury", 57.9e9, 0, 3.285e23, 2439e3, (179, 104, 18), y_vel=-47.4e3)
         Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), y_vel=-35.02e3)
@@ -301,9 +301,7 @@ class Panel:
                 topleft_texts.append("Active")
             else:
                 # topleft_texts.append("Inactive")
-                topleft_texts.append("From Sun " +
-                                     str(format(int(focus_obj.info_distance_to_sun/1e3), ',')) +
-                                     "km | " + str(round(focus_obj.info_distance_to_sun/AU, 3)) + "AU")
+                pass
             vel = math.sqrt(focus_obj.x_vel ** 2 + focus_obj.y_vel ** 2)
             topleft_texts.append("Speed    "+str(format(round(abs(vel/1e3), 3), ','))+"km/s")
             topleft_texts.append("Mass     "+str(focus_obj.mass)+"kg")
