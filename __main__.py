@@ -87,12 +87,6 @@ class Object:
             screen.blit(text, rect)
 
         if self.show_info:
-            # if not self.sun:
-                # text = Resources.font.render(str(format(int(self.distance_to_sun/1e3), ','))+"km", True, (200,200,200))
-                # rect = text.get_rect()
-                # rect.center = (x, y + r + 30)
-                # screen.blit(text, (10, 10))
-            
             if r > 1:
                 pygame.draw.line(screen, (200,200,200), (x + r + 15, y), (x + r + 20, y))
                 pygame.draw.line(screen, (200,200,200), (x - r - 15, y), (x - r - 20, y))
@@ -101,6 +95,8 @@ class Object:
 
             self.show_info = False
 
+        # TODO: Make it like when the Object takes a decent screen space (zoomed) then
+        # Show more info and stop zoom (?)
         return x, y
     
     def kill(self):
@@ -112,8 +108,8 @@ class Object:
         distance_y = other_y - self.y
         distance = math.sqrt(distance_x ** 2 + distance_y ** 2)
 
-        if distance <= (self.radius + other.radius) and self.mass > other.mass:
-            print(self.name, "into", other.name)
+        if distance <= (self.radius + other.radius):  # collision detected
+            print("Collision: ", self.name, "into", other.name)  # log
             # new = Object("New", (big.x+small.x)/2, (big.y+small.y)/2, big.mass+small.mass,
             #              big.radius,
             #              [(big.color[i]+small.color[i])/2 for i in range(3)],
@@ -123,7 +119,10 @@ class Object:
 
             self.mass += other.mass
             # big.kill()
-            other.kill()
+            if self.mass > other.mass:  # kills the smaller object by mass in event of collision
+                other.kill()
+            else:
+                self.kill()
 
         if other.star:
             self.info_distance_to_sun = distance
@@ -176,39 +175,6 @@ class Simulation:
     def __init__(self):
         """Units: Meter, Second, KG"""
         self.panel = Panel(self)
-        sun = Object("Sun", 0, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=True)
-        Object("Sun 2", 8*AU, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=False, y_vel=5e3)
-        # Object("Sun 3", 1*AU, 0, SOLAR_MASS, 696340e3, (254, 185, 20), star=True)
-
-        Object("Mercury", 57.9e9, 0, 3.285e23, 2439e3, (179, 104, 18), y_vel=-47.4e3)
-        Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), y_vel=-35.02e3)
-        Object("Earth", AU, 0, EARTH_MASS, 6378e3, (79, 146, 255), y_vel=-29.8e3)
-        Object("Mars", -228e9, 0, 0.642e24, 6792e3/2, (237, 77, 14), y_vel=24.1e3)
-        Object("Jupiter", 778.5e9, 0, 1898e24, 142984e3/2, (216, 202, 157), y_vel=-13.1e3)
-        Object("Saturn", -1432e9, 0 , 568e24, 120536e3/2, (206,206,206), y_vel=9.7e3)
-        Object("Uranus", 0, -2867e9, 86.8e24, 51118e3/2, (209,231,231), x_vel=6.8e3)
-        Object("Neptune", 0, 4515e9, 102e24, 49528e3/2, (91,93,223), x_vel=5.4e3)
-
-        Object("Ceres", 414e9, 0, 9.3839e23, 939.4e3/2, (158,158,150), y_vel=-17.9e3, significant=False, track_orbit=True)
-        Object("Pluto", -5900e9, 0, 1.303e22, 1188.3e3, (244,245,223), y_vel=4.743e3, significant=False, track_orbit=True)
-        Object("Haumea", 43.116*AU, 0, 4.006e21, 780e3/2, (158,158,150), y_vel=-4.53e3, significant=False, track_orbit=True)
-
-        # for i in range(20):
-        #     dist = random.randint(1.9*AU, 3.8*AU)
-        #     angle = random.randint(1, 360)
-        #     speed = math.sqrt(G * SOLAR_MASS / dist)
-
-        #     x, y = cords(dist, angle)
-        #     vx, vy = calc_xy_speed(angle, speed)
-            
-        #     # signx = 1 if x > 0 else -1
-        #     # signy = 1 if y > 0 else -1
-
-        #     # print(x * ZOOM, y * ZOOM)
-        #     # print(speed, vx, vy)
-        #     Object(f"T{i}", x, y, 2.39e21,
-        #             random.randint(1e3, 10e3), (100,100,100), x_vel=vx, y_vel=vy,
-        #             significant=False, track_orbit=True)
         
         self.focus = ""
     
@@ -257,24 +223,25 @@ class Simulation:
             screen.blit(Resources.space_image, rect)
 
             focus_obj = None
-            dists = {}
-            for obj in OBJECTS:
-                if not pause: obj.update_position()
-                if obj.name == self.focus:
-                    track(obj)
-                    setup_perspective()
-                    focus_obj = obj
-                ox, oy = obj.draw()
-                dist = math.sqrt((mx-ox)**2 + (my-oy)**2)
-                dists[dist] = obj
-            
-            # show info for the closest obj
-            min_dist = min(list(dists))
-            if min_dist < 80:
-                dists[min_dist].show_info = True
-                if keys[pygame.K_TAB]:
-                    self.focus = dists[min_dist].name
-            
+            if OBJECTS:
+                dists = {}
+                for obj in OBJECTS:
+                    if not pause: obj.update_position()
+                    if obj.name == self.focus:
+                        track(obj)
+                        setup_perspective()
+                        focus_obj = obj
+                    ox, oy = obj.draw()
+                    dist = math.sqrt((mx-ox)**2 + (my-oy)**2)
+                    dists[dist] = obj
+                
+                # show info for the closest obj
+                min_dist = min(list(dists))
+                if min_dist < 80:
+                    dists[min_dist].show_info = True
+                    if keys[pygame.K_TAB]:
+                        self.focus = dists[min_dist].name
+                
             self.panel.draw(focus_obj=focus_obj)
             # show fps
             fps = str(int(clock.get_fps()))
@@ -284,7 +251,7 @@ class Simulation:
             screen.blit(text, rect)
 
             pygame.display.flip()
-            clock.tick(60)
+            clock.tick(90)  # max fps
 
         pygame.quit()
 
@@ -320,11 +287,72 @@ class Panel:
             screen.blit(text, (20, y))
         
         # bottomleft
-        text = Resources.font.render("Zoom: " + str(ZOOM), False, (225,225,225))
+        text = Resources.font.render("Zoom: " + str('{:.3g}'.format(ZOOM)), False, (225,225,225))
+        # '{:.3g}'.format rounds exponential float
         rect = text.get_rect()
         rect.bottomleft = (20, HEIGHT - 20)
         screen.blit(text, rect)
 
 
-if __name__ == "__main__":
-    Simulation().run()
+
+def solarsystem():
+    Object("Sun", 0, 0, SOLAR_MASS, 696340e3, (253, 184, 19), star=True)
+
+    Object("Mercury", 57.9e9, 0, 3.285e23, 2439e3, (179, 104, 18), y_vel=-47.4e3)
+    Object("Venus", -107.4e9, 0, 4.867e24, 6051e3, (204, 148, 29), y_vel=-35.02e3)
+    Object("Earth", AU, 0, EARTH_MASS, 6378e3, (79, 146, 255), y_vel=-29.8e3)
+    
+    Object("Mars", -228e9, 0, 0.642e24, 6792e3/2, (237, 77, 14), y_vel=24.1e3)
+    Object("Jupiter", 778.5e9, 0, 1898e24, 142984e3/2, (216, 202, 157), y_vel=-13.1e3)
+    Object("Saturn", -1432e9, 0 , 568e24, 120536e3/2, (206,206,206), y_vel=9.7e3)
+    Object("Uranus", 0, -2867e9, 86.8e24, 51118e3/2, (209,231,231), x_vel=6.8e3)
+    Object("Neptune", 0, 4515e9, 102e24, 49528e3/2, (91,93,223), x_vel=5.4e3)
+
+    Object("Ceres", 414e9, 0, 9.3839e23, 939.4e3/2, (158,158,150), y_vel=-17.9e3, significant=False, track_orbit=True)
+    Object("Pluto", -5900e9, 0, 1.303e22, 1188.3e3, (244,245,223), y_vel=4.743e3, significant=False, track_orbit=True)
+    Object("Haumea", 43.116*AU, 0, 4.006e21, 780e3/2, (158,158,150), y_vel=-4.53e3, significant=False, track_orbit=True)
+
+    # for i in range(20):
+    #     dist = random.randint(1.9*AU, 3.8*AU)
+    #     angle = random.randint(1, 360)
+    #     speed = math.sqrt(G * SOLAR_MASS / dist)
+
+    #     x, y = cords(dist, angle)
+    #     vx, vy = calc_xy_speed(angle, speed)
+        
+    #     # signx = 1 if x > 0 else -1
+    #     # signy = 1 if y > 0 else -1
+
+    #     # print(x * ZOOM, y * ZOOM)
+    #     # print(speed, vx, vy)
+    #     Object(f"T{i}", x, y, 2.39e21,
+    #             random.randint(1e3, 10e3), (100,100,100), x_vel=vx, y_vel=vy,
+    #             significant=False, track_orbit=True)
+
+
+def systemB():
+    Object("B Alpha", 0, 0, 2*SOLAR_MASS, 696340e3, (240, 126, 5), x_vel=3e3, star=True)
+    Object("1-B", -2*AU, 0, EARTH_MASS, 6400e3, (200, 200, 10), y_vel=2e4)
+    Object("2-B", 1.41*AU, 1.41*AU, EARTH_MASS, 6400e3, (200, 200, 10), y_vel=-2e4)
+    Object("3-B", 1.41*AU, 2*AU, EARTH_MASS, 6400e3, (200, 200, 10), y_vel=-2e4)
+    Object("4-B", 2*AU, -1.41*AU, EARTH_MASS, 6400e3, (200, 200, 10), y_vel=-2e4)
+    # TODO: Refine
+
+
+def dualstarsystem():
+    Object("C41-A", 0, 0, 2*SOLAR_MASS, 696340e3, (240, 126, 5), star=True)
+    Object("C41-B", 0, 1.25*AU, SOLAR_MASS, 696340e3, (240, 126, 5), x_vel=55e3, star=True)
+    # TODO: Refine
+
+
+def test():
+    # collision on first frame
+    Object("C41-A", 0, 0, 2*SOLAR_MASS, 696340e3, (240, 126, 5), star=True)
+    Object("C41-B", 0, 10, SOLAR_MASS, 696340e3, (240, 126, 5), star=True)
+
+
+
+if __name__ == "__main__": 
+    sim = Simulation()
+    test()
+    sim.run()
